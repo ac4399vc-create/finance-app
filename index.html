@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Фин контроль · мобайл фикс</title>
+  <!-- Tesseract.js для OCR -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.0.2/tesseract.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+
+    body {
+      background: #0b0d1a;
+      color: #f0f3ff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overscroll-behavior-y: contain;
+      touch-action: pan-y;
+    }
+
+    /* анимированный фон (оптимизированный для мобильных) */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 40%, #1f2b6b, #0b0b1a 70%);
+      animation: rotate 80s linear infinite;
+      z-index: -2;
+      will-change: transform;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at 70% 20%, rgba(100, 150, 255, 0.1) 0%, transparent 60%);
+      z-index: -1;
+    }
+    @keyframes rotate {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* основной контейнер */
+    .app {
+      width: 100%;
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 12px 12px 80px; /* отступ снизу для кнопок */
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+      z-index: 10;
+    }
+
+    /* унифицированная карточка */
+    .card {
+      background: rgba(15, 18, 35, 0.85);
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+      border: 1px solid rgba(110, 140, 255, 0.25);
+      border-radius: 28px;
+      padding: 18px 16px;
+      box-shadow: 0 8px 24px -6px #00000080;
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(100, 150, 255, 0.4), transparent);
+    }
+
+    /* все поля ввода, select, кнопки — одинаковые */
+    .field, .btn, .type-opt, .scan-btn, .btn-clear, .budget-input, select.input, input.input, .budget-msg {
+      width: 100%;
+      background: #161e3c;
+      border: 2px solid #334180;
+      border-radius: 56px;
+      padding: 16px 20px;
+      font-size: 1.15rem;
+      color: white;
+      outline: none;
+      transition: all 0.15s ease;
+      appearance: none;
+      min-height: 56px;
+      font-weight: 500;
+    }
+
+    /* кнопки дополнительно */
+    .btn, .btn-clear, .scan-btn, .type-opt {
+      text-align: center;
+      font-weight: 600;
+      cursor: pointer;
+      background: #1f2952;
+      border-color: #5f72ce;
+      user-select: none;
+      touch-action: manipulation;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .btn::after, .btn-clear::after, .scan-btn::after, .type-opt::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.1);
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 0;
+    }
+    
+    .btn:active::after, .btn-clear:active::after, .scan-btn:active::after, .type-opt:active::after {
+      opacity: 1;
+    }
+    
+    .btn span, .btn-clear span, .scan-btn span, .type-opt span {
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn:active, .btn-clear:active, .scan-btn:active, .type-opt:active {
+      transform: scale(0.97);
+      border-color: #7a8bff;
+    }
+    
+    .type-opt.active {
+      background: linear-gradient(145deg, #4a5ac0, #2a3572);
+      border-color: #b1acff;
+      color: white;
+      box-shadow: 0 0 12px rgba(91, 106, 224, 0.5);
+    }
+    
+    /* для select убираем стандартную стрелку, добавим свою */
+    select {
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23aab7f0' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 18px center;
+      background-size: 18px;
+      padding-right: 40px;
+    }
+
+    /* шапка */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: 1.9rem;
+      font-weight: 700;
+      background: linear-gradient(145deg, #e0d7ff, #adc4ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+      flex: 1;
+    }
+    .header-icon {
+      font-size: 2.4rem;
+      min-width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* сводка */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .summary-item {
+      background: #10152f;
+      border-radius: 24px;
+      padding: 14px 4px;
+      text-align: center;
+      border: 1px solid #394894;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .summary-label {
+      font-size: 0.85rem;
+      color: #b5c8ff;
+      margin-bottom: 4px;
+    }
+    .summary-value {
+      font-size: 1.45rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .income-val { color: #a0ecb0; }
+    .expense-val { color: #ffafaf; }
+    .balance-val { color: #dbbaff; }
+
+    /* бюджет */
+    .budget-title {
+      font-size: 1.45rem;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+    .budget-msg {
+      background: #121937;
+      border-color: #6f86f0;
+      text-align: center;
+      font-weight: 500;
+      margin-top: 10px;
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 16px;
+      line-height: 1.4;
+    }
+    .budget-msg strong {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    /* форма */
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .type-switch {
+      display: flex;
+      gap: 10px;
+      margin: 8px 0;
+    }
+    .type-opt {
+      flex: 1;
+      padding: 14px 8px;
+      font-size: 1.05rem;
+      min-height: 52px;
+    }
+    .category-wrap.hidden {
+      display: none;
+    }
+    
+    label {
+      display: block;
+      margin-left: 4px;
+      margin-bottom: 6px;
+      font-size: 0.95rem;
+      color: #c3d1ff;
+      font-weight: 500;
+    }
+
+    /* сканер */
+    .scan-block {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .scan-btn {
+      flex: 1 1 100%;
+      padding: 16px;
+      font-size: 1.15rem;
+      min-height: 56px;
+    }
+    .ocr-text {
+      width: 100%;
+      background: #121b3d;
+      border-radius: 24px;
+      padding: 16px;
+      border: 2px solid #4456af;
+      color: #cadaff;
+      font-size: 1.05rem;
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      line-height: 1.4;
+      margin-top: 8px;
+    }
+    
+    .ocr-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .ocr-loading::after {
+      content: '';
+      width: 16px;
+      height: 16px;
+      border: 2px solid #5f72ce;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* график */
+    .chart-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .chart-title {
+      width: 100%;
+      text-align: left;
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    canvas#categoryChart {
+      width: 200px;
+      height: 200px;
+      max-width: 100%;
+      background: #101633;
+      border-radius: 50%;
+      box-shadow: 0 0 24px rgba(60, 71, 144, 0.6);
+      display: block;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      justify-content: center;
+      margin-top: 8px;
+      max-width: 100%;
+      padding: 0 8px;
+    }
+    .legend-item {
+      background: rgba(26, 34, 74, 0.7);
+      border-radius: 32px;
+      padding: 6px 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.95rem;
+      white-space: nowrap;
+      max-width: 45%;
+    }
+    .legend-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    /* список операций */
+    .list {
+      max-height: 320px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+      padding-right: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: #3a4cb5 #1a224a;
+    }
+    .list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .list::-webkit-scrollbar-track {
+      background: #1a224a;
+      border-radius: 10px;
+    }
+    .list::-webkit-scrollbar-thumb {
+      background-color: #3a4cb5;
+      border-radius: 10px;
+    }
+    .tx-item {
+      background: #121b3f;
+      border-radius: 24px;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      border: 1px solid #4a5cad;
+      position: relative;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      min-height: 72px;
+    }
+    .tx-item:active {
+      transform: scale(0.99);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .tx-left {
+      flex: 1;
+      min-width: 0;
+      padding-right: 8px;
+    }
+    .tx-left .tx-desc {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tx-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      font-size: 0.95rem;
+      color: #b3c6ff;
+      line-height: 1.4;
+    }
+    .tx-amount {
+      font-size: 1.55rem;
+      font-weight: 700;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      min-width: 90px;
+      text-align: right;
+      padding-left: 8px;
+    }
+    .income-tx { color: #9df0b1; }
+    .expense-tx { color: #ffa7a7; }
+    .delete-btn {
+      background: #552f4b;
+      border: none;
+      border-radius: 36px;
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      font-size: 1.35rem;
+      color: white;
+      cursor: pointer;
+      touch-action: manipulation;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+    .delete-btn:active {
+      background: #7a3a5e;
+      transform: scale(0.92);
+    }
+    .footer-bar {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .btn-clear {
+      width: auto;
+      padding: 14px 24px;
+      background: #262f5a;
+      min-height: 52px;
+      font-size: 1.05rem;
+    }
+    .empty-list {
+      text-align: center;
+      padding: 36px 20px;
+      color: #9aabdf;
+      line-height: 1.5;
+    }
+    
+    .empty-list-icon {
+      font-size: 3rem;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    /* уведомления */
+    .notification {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(30, 40, 80, 0.95);
+      border: 2px solid #5f72ce;
+      border-radius: 28px;
+      padding: 14px 24px;
+      color: white;
+      font-weight: 500;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      max-width: 90%;
+      text-align: center;
+    }
+    .notification.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .notification.success { border-color: #4caf50; }
+    .notification.error { border-color: #ff5252; }
+    .notification.warning { border-color: #ffca28; }
+
+    /* загрузка */
+    .loading {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(11, 13, 26, 0.92);
+      backdrop-filter: blur(8px);
+      z-index: 2000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+    .loading.show {
+      display: flex;
+    }
+    .loading-spinner {
+      width: 60px;
+      height: 60px;
+      border: 4px solid rgba(100, 150, 255, 0.3);
+      border-top-color: #6496ff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    .loading-text {
+      color: white;
+      font-size: 1.4rem;
+      font-weight: 500;
+      text-align: center;
+      max-width: 80%;
+      line-height: 1.4;
+    }
+
+    /* всё одинаковое, кнопки огромные */
+    @media (max-width: 400px) {
+      .field, .btn, .type-opt, .scan-btn, .budget-input, select, input, .budget-msg {
+        padding: 14px 16px;
+        font-size: 1.05rem;
+        border-radius: 52px;
+        min-height: 52px;
+      }
+      .header h1 { 
+        font-size: 1.7rem;
+        letter-spacing: -0.3px;
+      }
+      .header-icon {
+        font-size: 2.2rem;
+        min-width: 44px;
+        height: 44px;
+      }
+      .summary-value { font-size: 1.3rem; }
+      .summary-label { font-size: 0.8rem; }
+      .summary-item { min-height: 76px; padding: 12px 4px; }
+      .budget-title { font-size: 1.35rem; }
+      .type-opt { padding: 12px 6px; font-size: 1rem; min-height: 48px; }
+      .btn-clear { padding: 12px 20px; font-size: 1rem; min-height: 48px; }
+      .tx-left .tx-desc { font-size: 1.15rem; }
+      .tx-meta { font-size: 0.9rem; }
+      .tx-amount { font-size: 1.45rem; min-width: 80px; }
+      .delete-btn { width: 44px; height: 44px; font-size: 1.25rem; }
+      .app { padding: 10px 10px 70px; }
+      .card { border-radius: 24px; padding: 16px 14px; }
+      canvas#categoryChart { width: 180px; height: 180px; }
+      .legend-item { padding: 5px 14px; font-size: 0.9rem; }
+      .legend-color { width: 14px; height: 14px; }
+      .chart-title { font-size: 1.4rem; }
+      .ocr-text { font-size: 1rem; min-height: 52px; padding: 14px; }
+      .scan-btn { padding: 14px; font-size: 1.1rem; }
+      .list { max-height: 280px; }
+    }
+    
+    @media (max-width: 320px) {
+      .field, .btn, .type-opt, .scan-btn, .budget-input, select, input, .budget-msg {
+        padding: 12px 14px;
+        font-size: 1rem;
+        min-height: 48px;
+      }
+      .header h1 { font-size: 1.55rem; }
+      .header-icon { font-size: 2rem; min-width: 40px; height: 40px; }
+      .summary-value { font-size: 1.2rem; }
+      .summary-label { font-size: 0.75rem; }
+      .summary-item { min-height: 72px; padding: 10px 4px; }
+      .budget-title { font-size: 1.25rem; }
+      .type-opt { padding: 10px 4px; font-size: 0.95rem; min-height: 44px; }
+      .btn-clear { padding: 10px 16px; font-size: 0.95rem; min-height: 44px; }
+      .tx-left .tx-desc { font-size: 1.05rem; }
+      .tx-meta { font-size: 0.85rem; gap: 6px 10px; }
+      .tx-amount { font-size: 1.35rem; min-width: 75px; }
+      .delete-btn { width: 40px; height: 40px; font-size: 1.15rem; }
+      .app { padding: 8px 8px 65px; }
+      .card { border-radius: 20px; padding: 14px 12px; }
+      canvas#categoryChart { width: 160px; height: 160px; }
+      .legend-item { padding: 4px 12px; font-size: 0.85rem; max-width: 48%; }
+      .legend-color { width: 12px; height: 12px; }
+      .chart-title { font-size: 1.3rem; }
+      .ocr-text { font-size: 0.95rem; min-height: 48px; padding: 12px; }
+      .scan-btn { padding: 12px; font-size: 1.05rem; }
+      .list { max-height: 260px; }
+      .budget-msg { font-size: 0.95rem; min-height: 52px; }
+      .empty-list { padding: 30px 16px; font-size: 0.95rem; }
+      .empty-list-icon { font-size: 2.6rem; }
+    }
+    
+    /* Анимации появления элементов */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .card {
+      animation: fadeInUp 0.4s ease-out forwards;
+      opacity: 0;
+    }
+    
+    .card:nth-child(1) { animation-delay: 0.1s; opacity: 0; }
+    .card:nth-child(2) { animation-delay: 0.15s; opacity: 0; }
+    .card:nth-child(3) { animation-delay: 0.2s; opacity: 0; }
+    .card:nth-child(4) { animation-delay: 0.25s; opacity: 0; }
+    .card:nth-child(5) { animation-delay: 0.3s; opacity: 0; }
+    .card:nth-child(6) { animation-delay: 0.35s; opacity: 0; }
+    .card:nth-child(7) { animation-delay: 0.4s; opacity: 0; }
+    
+    .card.visible {
+      opacity: 1;
+    }
+    
+    /* Состояние фокуса для доступности */
+    .field:focus, .btn:focus, .type-opt:focus, .scan-btn:focus, select:focus {
+      border-color: #7a8bff;
+      box-shadow: 0 0 0 2px rgba(122, 139, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+<div class="loading" id="loadingScreen">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Загрузка приложения...<br>Подготовка к работе</div>
+</div>
+
+<div class="notification" id="notification">
+  <span id="notificationIcon"></span>
+  <span id="notificationText"></span>
+</div>
+
+<div class="app">
+  <!-- шапка -->
+  <div class="card header visible">
+    <div class="header-icon">🧠💰</div>
+    <h1>нейрофинансы</h1>
+  </div>
+
+  <!-- сводка -->
+  <div class="card summary-row visible">
+    <div class="summary-item">
+      <div class="summary-label">Доходы</div>
+      <div class="summary-value income-val" id="totalIncome">0 ₽</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Расходы</div>
+      <div class="summary-value expense-val" id="totalExpense">0 ₽</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Баланс</div>
+      <div class="summary-value balance-val" id="totalBalance">0 ₽</div>
+    </div>
+  </div>
+
+  <!-- автобюджет -->
+  <div class="card visible">
+    <div class="budget-title"><span>🤖</span> остаток 5000₽ с зарплаты</div>
+    <div style="margin-bottom: 12px;">
+      <label for="salaryInput">💰 Зарплата (в месяц)</label>
+      <input type="number" id="salaryInput" class="field budget-input" inputmode="numeric" value="30000" placeholder="30000">
+    </div>
+    <div style="margin-bottom: 12px;">
+      <label for="nextSalaryDate">📅 Следующая зарплата</label>
+      <input type="date" id="nextSalaryDate" class="field budget-input">
+    </div>
+    <div class="budget-msg" id="budgetMessage">⚡ Рассчитываю...</div>
+  </div>
+
+  <!-- добавление операции -->
+  <div class="card visible">
+    <div class="row">
+      <label for="descInput">Описание операции</label>
+      <input type="text" id="descInput" class="field" placeholder="Описание" autocomplete="off">
+    </div>
+    <div class="row">
+      <label for="amountInput">Сумма в рублях</label>
+      <input type="number" id="amountInput" class="field" inputmode="decimal" placeholder="0.00" min="0" step="0.01" value="0.00">
+    </div>
+    <div class="type-switch" id="typeToggle">
+      <div class="type-opt income active" data-type="income" role="button" tabindex="0">💹 Доход</div>
+      <div class="type-opt expense" data-type="expense" role="button" tabindex="0">🔻 Расход</div>
+    </div>
+    <div class="category-wrap" id="categoryBlock">
+      <label for="categorySelect">Категория расходов</label>
+      <select id="categorySelect" class="field">
+        <option value="Еда">🍔 Еда</option>
+        <option value="Транспорт">🚗 Транспорт</option>
+        <option value="Покупки">🛍️ Покупки</option>
+        <option value="Развлечения">🎬 Развлечения</option>
+        <option value="Коммуналка">💡 Коммуналка</option>
+        <option value="Другое">📦 Другое</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="dateInput">Дата операции</label>
+      <input type="date" id="dateInput" class="field">
+    </div>
+    <button class="btn" id="addTransactionBtn" aria-label="Добавить финансовую операцию">
+      <span>➕</span> Добавить запись
+    </button>
+  </div>
+
+  <!-- сканер чека -->
+  <div class="card visible">
+    <div class="chart-title">📸 Сканировать чек</div>
+    <div class="scan-block">
+      <input type="file" id="receiptImage" accept="image/*" capture="environment" style="display:none;">
+      <button class="scan-btn" id="scanReceiptBtn" aria-label="Сделать фото чека">
+        <span>📷</span> Снять чек
+      </button>
+      <div class="ocr-text" id="ocrResult">Нажмите кнопку, чтобы сфотографировать чек</div>
+    </div>
+  </div>
+
+  <!-- график -->
+  <div class="card chart-container visible">
+    <div class="chart-title">📊 Расходы по категориям</div>
+    <canvas id="categoryChart" width="200" height="200"></canvas>
+    <div class="legend" id="chartLegend"></div>
+  </div>
+
+  <!-- список операций -->
+  <div class="card visible">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap: wrap; gap: 8px;">
+      <span class="chart-title" style="margin:0;">📋 Последние операции</span>
+      <button class="btn-clear" id="clearAllBtn" aria-label="Удалить все операции">очистить всё</button>
+    </div>
+    <div class="list" id="transactionList">
+      <div class="empty-list">
+        <span class="empty-list-icon">✨</span>
+        Пока нет операций<br>Добавьте первую запись!
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // Показать экран загрузки при старте
+    document.getElementById('loadingScreen').classList.add('show');
+    
+    // Имитация загрузки для плавного появления
+    setTimeout(() => {
+      document.getElementById('loadingScreen').classList.remove('show');
+      
+      // Показать карточки с анимацией
+      setTimeout(() => {
+        document.querySelectorAll('.card').forEach((card, index) => {
+          setTimeout(() => {
+            card.classList.add('visible');
+          }, 100 * index);
+        });
+      }, 300);
+    }, 800);
+    
+    // --- данные ---
+    let transactions = [];
+    const categoryColors = {
+      'Еда': '#f97373', 'Транспорт': '#73b9f9', 'Покупки': '#f9c573',
+      'Развлечения': '#c573f9', 'Коммуналка': '#73f9cd', 'Другое': '#b0b0b0'
+    };
+
+    function load() {
+      const stored = localStorage.getItem('mobile_finance_v2');
+      if (stored) {
+        try { 
+          transactions = JSON.parse(stored); 
+        } catch { 
+          transactions = []; 
+          showNotification('Ошибка загрузки данных', 'error');
+        }
+      } else {
+        transactions = [
+          { id: Date.now()-1000000, description: 'Зарплата', amount: 30000, category: '—', type: 'income', date: getTodayString() },
+          { id: Date.now()-900000, description: 'Продукты', amount: 2500, category: 'Еда', type: 'expense', date: getTodayString() },
+          { id: Date.now()-800000, description: 'Такси', amount: 600, category: 'Транспорт', type: 'expense', date: getTodayString() },
+        ];
+      }
+    }
+    
+    function save() { 
+      try {
+        localStorage.setItem('mobile_finance_v2', JSON.stringify(transactions));
+      } catch (e) {
+        showNotification('Ошибка сохранения данных', 'error');
+      }
+    }
+    
+    function getTodayString() { 
+      const today = new Date();
+      return today.toISOString().split('T')[0]; 
+    }
+
+    // --- DOM элементы ---
+    const totalIncomeEl = document.getElementById('totalIncome');
+    const totalExpenseEl = document.getElementById('totalExpense');
+    const totalBalanceEl = document.getElementById('totalBalance');
+    const listEl = document.getElementById('transactionList');
+    const addBtn = document.getElementById('addTransactionBtn');
+    const descInput = document.getElementById('descInput');
+    const amountInput = document.getElementById('amountInput');
+    const dateInput = document.getElementById('dateInput');
+    const categorySelect = document.getElementById('categorySelect');
+    const categoryBlock = document.getElementById('categoryBlock');
+    const typeOptions = document.querySelectorAll('.type-opt');
+    const chartCanvas = document.getElementById('categoryChart');
+    const chartLegend = document.getElementById('chartLegend');
+    const clearAllBtn = document.getElementById('clearAllBtn');
+    const salaryInput = document.getElementById('salaryInput');
+    const nextSalaryDate = document.getElementById('nextSalaryDate');
+    const budgetMessage = document.getElementById('budgetMessage');
+    const scanBtn = document.getElementById('scanReceiptBtn');
+    const receiptImage = document.getElementById('receiptImage');
+    const ocrResultDiv = document.getElementById('ocrResult');
+    const notification = document.getElementById('notification');
+    const notificationText = document.getElementById('notificationText');
+    const notificationIcon = document.getElementById('notificationIcon');
+
+    let currentType = 'income';
+    dateInput.value = getTodayString();
+
+    // следующая зарплата (первое число следующего месяца)
+    const defaultNext = new Date();
+    defaultNext.setMonth(defaultNext.getMonth() + 1);
+    defaultNext.setDate(1);
+    nextSalaryDate.value = defaultNext.toISOString().split('T')[0];
+
+    // --- переключение типа (и click и touchstart для надёжности) ---
+    function setActiveType(type) {
+      typeOptions.forEach(opt => {
+        if (opt.dataset.type === type) {
+          opt.classList.add('active');
+        } else {
+          opt.classList.remove('active');
+        }
+      });
+      currentType = type;
+      if (type === 'income') {
+        categoryBlock.classList.add('hidden');
+      } else {
+        categoryBlock.classList.remove('hidden');
+      }
+      // Обновить фокус для доступности
+      if (type === 'expense' && !categoryBlock.classList.contains('hidden')) {
+        categorySelect.focus();
+      }
+    }
+
+    typeOptions.forEach(opt => {
+      function handler(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveType(opt.dataset.type);
+      }
+      opt.addEventListener('click', handler);
+      opt.addEventListener('touchstart', handler, { passive: false });
+      // Для клавиатуры
+      opt.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handler(e);
+        }
+      });
+    });
+    setActiveType('income'); // начальное состояние
+
+    // --- добавление ---
+    function addTransaction() {
+      const description = descInput.value.trim();
+      if (!description) { 
+        showNotification('Введите описание операции', 'warning');
+        descInput.focus();
+        return; 
+      }
+      
+      const amountStr = amountInput.value.trim();
+      if (!amountStr) {
+        showNotification('Введите сумму операции', 'warning');
+        amountInput.focus();
+        return;
+      }
+      
+      // Обработка запятой как десятичного разделителя
+      const amountValue = parseFloat(amountStr.replace(',', '.'));
+      if (isNaN(amountValue) || amountValue <= 0) { 
+        showNotification('Сумма должна быть больше 0', 'warning');
+        amountInput.focus();
+        return; 
+      }
+      
+      const date = dateInput.value || getTodayString();
+      let category = 'Другое';
+      if (currentType === 'expense') category = categorySelect.value;
+      else category = '—';
+
+      transactions.push({
+        id: Date.now() + Math.random(),
+        description, 
+        amount: Math.round(amountValue * 100) / 100, // сохраняем с копейками
+        category, 
+        type: currentType, 
+        date
+      });
+      
+      save();
+      updateUI();
+      
+      // Очистка формы
+      descInput.value = '';
+      amountInput.value = '0.00';
+      dateInput.value = getTodayString();
+      
+      // Фокус на описании для быстрого добавления следующей операции
+      descInput.focus();
+      
+      showNotification(currentType === 'income' ? 'Доход добавлен!' : 'Расход добавлен!', 'success');
+    }
+    
+    function setupButton(element, callback) {
+      element.addEventListener('click', (e) => {
+        e.preventDefault();
+        callback();
+      });
+      
+      element.addEventListener('touchstart', (e) => { 
+        e.preventDefault();
+        callback();
+      }, { passive: false });
+      
+      // Для клавиатуры
+      element.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          callback();
+        }
+      });
+    }
+    
+    setupButton(addBtn, addTransaction);
+
+    // --- удаление ---
+    function deleteTransaction(id) {
+      const originalLength = transactions.length;
+      transactions = transactions.filter(t => t.id !== id);
+      
+      if (transactions.length < originalLength) {
+        save();
+        updateUI();
+        showNotification('Операция удалена', 'success');
+      }
+    }
+
+    // --- очистка всего ---
+    setupButton(clearAllBtn, () => {
+      if (transactions.length === 0) {
+        showNotification('Нечего удалять - список пуст', 'warning');
+        return;
+      }
+      
+      // Модальное подтверждение для мобильных
+      if (confirm('Удалить все операции? Это действие нельзя отменить.')) {
+        transactions = [];
+        save();
+        updateUI();
+        showNotification('Все операции удалены', 'success');
+      }
+    });
+
+    // --- обновление интерфейса ---
+    function updateUI() {
+      let inc = 0, exp = 0;
+      transactions.forEach(t => t.type === 'income' ? inc += t.amount : exp += t.amount);
+      totalIncomeEl.textContent = format(inc);
+      totalExpenseEl.textContent = format(exp);
+      totalBalanceEl.textContent = format(inc - exp);
+
+      // список
+      const sorted = [...transactions].sort((a,b)=>new Date(b.date)-new Date(a.date));
+      if (sorted.length === 0) {
+        listEl.innerHTML = `
+          <div class="empty-list">
+            <span class="empty-list-icon">✨</span>
+            Пока нет операций<br>Добавьте первую запись!
+          </div>
+        `;
+      } else {
+        let html = '';
+        // Показываем последние 15 операций для мобильных
+        sorted.slice(0, 15).forEach(t => {
+          const sign = t.type === 'income' ? '+' : '−';
+          const amountClass = t.type === 'income' ? 'income-tx' : 'expense-tx';
+          html += `
+            <div class="tx-item">
+              <div class="tx-left">
+                <div class="tx-desc">${escapeHtml(t.description)}</div>
+                <div class="tx-meta">
+                  <span>${formatDate(t.date)}</span>
+                  ${t.type === 'expense' ? `<span>${t.category}</span>` : ''}
+                </div>
+              </div>
+              <div class="tx-amount ${amountClass}">
+                <span>${sign} ${format(t.amount)}</span>
+                <button class="delete-btn" data-id="${t.id}" aria-label="Удалить операцию ${escapeHtml(t.description)}">
+                  🗑️
+                </button>
+              </div>
+            </div>
+          `;
+        });
+        listEl.innerHTML = html;
+        
+        // Добавляем обработчики для кнопок удаления
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+          const id = Number(btn.dataset.id);
+          
+          setupButton(btn, () => {
+            deleteTransaction(id);
+          });
+        });
+      }
+
+      // график
+      drawPie();
+
+      // бюджет
+      updateBudgetAdvice();
+    }
+
+    function format(v) { 
+      // Форматируем с двумя знаками после запятой для копеек
+      return (Math.round(v * 100) / 100).toLocaleString('ru-RU', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }) + ' ₽'; 
+    }
+    
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    }
+    
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // --- круговая диаграмма ---
+    function drawPie() {
+      const ctx = chartCanvas.getContext('2d');
+      const w = chartCanvas.width, h = chartCanvas.height;
+      const expCat = {};
+      
+      // Собираем расходы по категориям
+      transactions.forEach(t => { 
+        if (t.type === 'expense') {
+          expCat[t.category] = (expCat[t.category] || 0) + t.amount;
+        }
+      });
+      
+      const cats = Object.keys(expCat);
+      const vals = Object.values(expCat);
+      const total = vals.reduce((a,b)=>a+b,0);
+      
+      // Очищаем холст
+      ctx.clearRect(0,0,w,h);
+      
+      // Если нет расходов
+      if (total === 0) {
+        ctx.fillStyle = '#1c234a';
+        ctx.beginPath();
+        ctx.arc(w/2, h/2, w*0.4, 0, 2*Math.PI);
+        ctx.fill();
+        
+        chartLegend.innerHTML = '<div class="legend-item">Нет расходов за период</div>';
+        return;
+      }
+      
+      // Рисуем секторы
+      let startAngle = -Math.PI/2; // Начинаем сверху
+      const colors = cats.map(c => categoryColors[c] || '#a0a0d0');
+      
+      for (let i = 0; i < cats.length; i++) {
+        const sliceAngle = (vals[i] / total) * 2 * Math.PI;
+        
+        ctx.beginPath();
+        ctx.moveTo(w/2, h/2);
+        ctx.arc(w/2, h/2, w*0.4, startAngle, startAngle + sliceAngle);
+        ctx.closePath();
+        
+        ctx.fillStyle = colors[i];
+        ctx.fill();
+        
+        ctx.strokeStyle = '#0f142a';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        startAngle += sliceAngle;
+      }
+      
+      // Рисуем центральную "дырку"
+      ctx.beginPath();
+      ctx.arc(w/2, h/2, w*0.15, 0, 2*Math.PI);
+      ctx.fillStyle = '#0f142a';
+      ctx.fill();
+      
+      // Генерируем легенду
+      let legendHtml = '';
+      cats.forEach((category, i) => {
+        const percentage = Math.round((vals[i] / total) * 100);
+        legendHtml += `
+          <div class="legend-item">
+            <span class="legend-color" style="background:${colors[i]}"></span>
+            ${category} (${percentage}%)
+          </div>
+        `;
+      });
+      chartLegend.innerHTML = legendHtml;
+    }
+
+    // --- умный бюджет ---
+    function updateBudgetAdvice() {
+      const salaryStr = salaryInput.value.trim();
+      if (!salaryStr) {
+        budgetMessage.innerHTML = '<span>⚡</span> Укажите зарплату для расчета бюджета';
+        return;
+      }
+      
+      const salary = parseFloat(salaryStr.replace(',', '.'));
+      if (salary <= 0) { 
+        budgetMessage.innerHTML = '<span>⚠️</span> Зарплата должна быть больше 0';
+        return; 
+      }
+
+      const nextStr = nextSalaryDate.value;
+      if (!nextStr) {
+        budgetMessage.innerHTML = '<span>📅</span> Укажите дату следующей зарплаты';
+        return;
+      }
+      
+      const next = new Date(nextStr);
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      next.setHours(0,0,0,0);
+      
+      const diffTime = next - today;
+      if (diffTime <= 0) { 
+        budgetMessage.innerHTML = '<span>📆</span> Дата зарплаты должна быть в будущем';
+        return; 
+      }
+      
+      const diffDays = Math.ceil(diffTime / (1000*60*60*24));
+      if (diffDays > 31) {
+        budgetMessage.innerHTML = '<span>💡</span> Период больше месяца. Укажите дату в пределах месяца';
+        return;
+      }
+
+      // Считаем расходы с начала месяца
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      const expensesThisMonth = transactions
+        .filter(t => t.type === 'expense' && new Date(t.date) >= firstDay)
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const remaining = salary - expensesThisMonth;
+      const target = 5000;
+      const available = remaining - target;
+
+      if (available < 0) {
+        budgetMessage.innerHTML = `
+          <span>⚠️</span> Перерасход! 
+          <div>Остаток: ${format(remaining)} (цель ${format(target)})</div>
+          <div style="margin-top:4px">Превышение на ${format(-available)}</div>
+        `;
+        // Показываем уведомление только если перерасход произошел сегодня
+        const lastExpenseToday = transactions.some(t => 
+          t.type === 'expense' && 
+          t.date === getTodayString() &&
+          t.amount > Math.abs(available)
+        );
+        
+        if (lastExpenseToday && Notification.permission === 'granted') {
+          showNotification(`Бюджет превышен! Перерасход на ${format(-available)}`, 'warning', true);
+        }
+      } else {
+        const daily = available / diffDays;
+        budgetMessage.innerHTML = `
+          <span>📅</span> Осталось ${diffDays} дн. 
+          <div>Можно тратить <strong>${format(Math.max(0, daily))}</strong>/день,</div>
+          <div>чтобы осталось ${format(target)}</div>
+        `;
+      }
+    }
+
+    // Запрашиваем разрешение на уведомления
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          console.log('Уведомления разрешены');
+        }
+      });
+    }
+
+    // --- Система уведомлений ---
+    function showNotification(message, type = 'info', systemNotification = false) {
+      // Системное уведомление
+      if (systemNotification && Notification.permission === 'granted') {
+        try {
+          new Notification('Финансовый трекер', {
+            body: message,
+            icon: 'https://cdn-icons-png.flaticon.com/512/25/25694.png',
+            badge: 'https://cdn-icons-png.flaticon.com/512/25/25694.png'
+          });
+        } catch (e) {
+          console.log('Ошибка системного уведомления:', e);
+        }
+      }
+      
+      // Внутреннее уведомление
+      notificationText.textContent = message;
+      
+      // Иконка в зависимости от типа
+      switch(type) {
+        case 'success':
+          notificationIcon.textContent = '✅';
+          notification.className = 'notification success';
+          break;
+        case 'error':
+          notificationIcon.textContent = '❌';
+          notification.className = 'notification error';
+          break;
+        case 'warning':
+          notificationIcon.textContent = '⚠️';
+          notification.className = 'notification warning';
+          break;
+        default:
+          notificationIcon.textContent = 'ℹ️';
+          notification.className = 'notification';
+      }
+      
+      // Показываем уведомление
+      notification.classList.add('show');
+      
+      // Скрываем через 3 секунды
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // --- OCR сканирование ---
+    setupButton(scanBtn, () => { 
+      receiptImage.click(); 
+    });
+
+    receiptImage.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      // Проверка размера файла (макс 5МБ)
+      if (file.size > 5 * 1024 * 1024) {
+        showNotification('Файл слишком большой. Максимум 5МБ', 'error');
+        receiptImage.value = '';
+        return;
+      }
+      
+      // Проверка типа файла
+      if (!file.type.match('image.*')) {
+        showNotification('Выберите изображение', 'error');
+        receiptImage.value = '';
+        return;
+      }
+      
+      // Показываем индикатор загрузки
+      ocrResultDiv.innerHTML = '<div class="ocr-loading">Распознавание чека...</div>';
+      
+      try {
+        // Показываем экран загрузки для долгих операций
+        document.getElementById('loadingScreen').classList.add('show');
+        document.getElementById('loadingScreen').querySelector('.loading-text').textContent = 'Распознавание текста с чека...';
+        
+        const { data: { text } } = await Tesseract.recognize(file, 'rus+eng', {
+          logger: m => console.log(m)
+        });
+        
+        // Скрываем экран загрузки
+        document.getElementById('loadingScreen').classList.remove('show');
+        
+        // Обрезаем текст для отображения
+        const previewText = text.substring(0, 80).replace(/\s+/g, ' ').trim() + (text.length > 80 ? '...' : '');
+        ocrResultDiv.textContent = previewText;
+        
+        // Ищем сумму в тексте
+        const amountMatch = text.match(/(?:итого|сумма|к оплате|total|amount|оплачено)\s*[=:]*\s*(\d+[\.,]?\d*)/i) || 
+                           text.match(/(\d+[\.,]\d+)\s*руб/i) || 
+                           text.match(/(\d+)\s*руб/i);
+        
+        if (amountMatch) {
+          // Извлекаем сумму
+          let sumStr = amountMatch[1] || amountMatch[2] || amountMatch[3] || amountMatch[0];
+          sumStr = sumStr.replace(/\s/g, '').replace(',', '.');
+          
+          // Убираем всё кроме цифр и точки
+          sumStr = sumStr.replace(/[^\d.]/g, '');
+          
+          const sum = parseFloat(sumStr);
+          if (!isNaN(sum) && sum > 0) {
+            // Устанавливаем сумму в поле ввода
+            amountInput.value = sum.toFixed(2);
+            
+            // Определяем категорию
+            const cat = guessCategory(text);
+            if (cat && currentType !== 'income') {
+              categorySelect.value = cat;
+              setActiveType('expense');
+            }
+            
+            // Устанавливаем описание
+            descInput.value = 'Чек ' + new Date().toLocaleDateString('ru-RU', {
+              day: '2-digit',
+              month: '2-digit'
+            });
+            
+            // Фокус на кнопке добавления
+            setTimeout(() => {
+              addBtn.focus();
+            }, 100);
+            
+            ocrResultDiv.innerHTML = `✅ Сумма: ${format(sum)}<br>Категория: ${cat || 'не определена'}`;
+            showNotification(`Распознана сумма ${format(sum)}`, 'success');
+          } else {
+            ocrResultDiv.innerHTML = '⚠️ Сумма не распознана корректно';
+            showNotification('Не удалось распознать сумму', 'warning');
+          }
+        } else {
+          ocrResultDiv.innerHTML = '⚠️ Сумма не найдена в тексте';
+          showNotification('Сумма не найдена на чеке', 'warning');
+        }
+      } catch (err) {
+        document.getElementById('loadingScreen').classList.remove('show');
+        console.error('OCR Error:', err);
+        ocrResultDiv.innerHTML = '❌ Ошибка распознавания';
+        showNotification('Ошибка при распознавании чека: ' + (err.message || 'неизвестная ошибка'), 'error');
+      }
+      
+      // Очищаем инпут для возможности повторного выбора того же файла
+      receiptImage.value = '';
+    });
+
+    function guessCategory(text) {
+      const t = text.toLowerCase();
+      
+      if (/(еда|продукт|покупка в|магнит|пятёрочк|лента|азбука вкуса|перекрёсток|метро|гипермаркет|супермаркет)/i.test(t)) return 'Еда';
+      if (/(такси|яндекс такси|ситимобил|убер|bolt|bolt.eu|водник|водитель|поездка|доставка|курьер|самокат|велосипед)/i.test(t)) return 'Транспорт';
+      if (/(одежда|обувь|wildberries|ozon|ламода|зарина|беру|сбермегамаркет|алиэкспресс|алибаба|aliexpress|ali)/i.test(t)) return 'Покупки';
+      if (/(кино|театр|концерт|музей|выставка|кафе|ресторан|бар|паб|боулинг|бильярд|развлечени|досуг)/i.test(t)) return 'Развлечения';
+      if (/(жкх|коммунал|электро|свет|газ|вода|отопление|интернет|тв|телефон|мтс|билайн|мегафон|tele2)/i.test(t)) return 'Коммуналка';
+      if (/(аптека|лекарство|здоровье|врач|клиника|больница|поликлиника|стоматология)/i.test(t)) return 'Здоровье';
+      
+      return 'Другое';
+    }
+
+    // События для обновления бюджета
+    salaryInput.addEventListener('input', updateBudgetAdvice);
+    nextSalaryDate.addEventListener('input', updateBudgetAdvice);
+    
+    // Обработка ввода суммы (заменяем запятую на точку при вводе)
+    amountInput.addEventListener('input', function(e) {
+      let value = e.target.value;
+      // Разрешаем только цифры, точку и запятую
+      value = value.replace(/[^0-9.,]/g, '');
+      // Заменяем запятую на точку
+      value = value.replace(',', '.');
+      // Ограничиваем до двух знаков после точки
+      if (value.includes('.')) {
+        const parts = value.split('.');
+        if (parts[1] && parts[1].length > 2) {
+          value = parts[0] + '.' + parts[1].substring(0, 2);
+        }
+      }
+      e.target.value = value;
+    });
+    
+    // Обработка ввода зарплаты
+    salaryInput.addEventListener('input', function(e) {
+      let value = e.target.value;
+      value = value.replace(/[^0-9]/g, '');
+      e.target.value = value;
+    });
+
+    // Enter для добавления операции
+    descInput.addEventListener('keydown', (e) => { 
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        amountInput.focus();
+      }
+    });
+    
+    amountInput.addEventListener('keydown', (e) => { 
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addTransaction();
+      }
+    });
+    
+    // Автоматический фокус на поле описания при открытии
+    setTimeout(() => {
+      descInput.focus();
+    }, 500);
+
+    // Загрузка данных и обновление интерфейса
+    load();
+    updateUI();
+    
+    // Показываем подсказку при первом запуске
+    if (!localStorage.getItem('finance_app_visited')) {
+      setTimeout(() => {
+        showNotification('💡 Совет: Нажмите на кнопку "Снять чек", чтобы автоматически распознать сумму с фотографии чека', 'info');
+      }, 2000);
+      localStorage.setItem('finance_app_visited', 'true');
+    }
+    
+    // Обработка ошибок на уровне приложения
+    window.addEventListener('error', (e) => {
+      console.error('Global error:', e);
+      if (!e.defaultPrevented) {
+        showNotification('Произошла ошибка в приложении. Попробуйте перезагрузить страницу.', 'error');
+      }
+    });
+    
+    // Обработка неудачных промисов
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('Unhandled rejection:', e.reason);
+      showNotification('Ошибка операции: ' + (e.reason?.message || 'неизвестная ошибка'), 'error');
+      e.preventDefault();
+    });
+  })();
+</script>
+</body>
+</html>
